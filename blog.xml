@@ -1,0 +1,134 @@
+<?xml version="1.0"?>
+<!-- This file is part of Nereid.  The COPYRIGHT file at the top level of
+this repository contains the full copyright notices and license terms. 
+-->
+<tryton>
+    <data>
+
+        <!-- Nereid User Blog Posts -->
+        <record model="ir.ui.view" id="nereid_user_blog_post_form">
+            <field name="model">blog.post</field>
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+                <![CDATA[
+                <form string="Blog Post">
+                    <label name="title"/>
+                    <field name="title" colspan="3"/>
+                    <newline/>
+                    <label name="uri"/>
+                    <field name="uri"/>
+                    <label name="nereid_user"/>
+                    <field name="nereid_user"/>
+                    <label name="post_date"/>
+                    <field name="post_date"/>
+                    <label name="allow_guest_comments"/>
+                    <field name="allow_guest_comments"/>
+                    <notebook colspan="4">
+                        <page string="Content" id="content">
+                            <field name="content" colspan="4"/>
+                        </page>
+                        <page string="Comments" id="comments">
+                            <field name="comments" colspan="4"/>
+                        </page>
+                    </notebook>
+                    <group col="3" colspan="4" id="buttons">
+                        <button name="draft" string="_Draft" icon="tryton-go-previous"/>
+                        <button name="publish" string="_Publish" icon="tryton-go-next"/>
+                        <button name="archive" string="_Archive" icon="tryton-ok"/>
+                    </group>
+                    <label name="state"/>
+                    <field name="state" colspan="3"/>
+                </form>
+                ]]>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="nereid_user_blog_post_tree">
+            <field name="model">blog.post</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <![CDATA[
+                <tree string="Blog Posts">
+                    <field name="title"/>
+                    <field name="uri"/>
+                    <field name="nereid_user"/>
+                    <field name="post_date"/>
+                    <field name="allow_guest_comments"/>
+                    <field name="state"/>
+                </tree>
+                ]]>
+            </field>
+        </record>
+
+        <record model="ir.action.act_window"
+            id="act_nereid_user_blog_post_view_form">
+            <field name="name">Blog Posts</field>
+            <field name="res_model">blog.post</field>
+        </record>
+
+        <record model="ir.action.act_window.view"
+                id="act_nereid_user_blog_post_view1">
+            <field name="sequence" eval="2"/>
+            <field name="view" ref="nereid_user_blog_post_form"/>
+            <field name="act_window" ref="act_nereid_user_blog_post_view_form"/>
+        </record>
+
+        <record model="ir.action.act_window.view"
+                id="act_nereid_user_blog_post_view2">
+            <field name="sequence" eval="1"/>
+            <field name="view" ref="nereid_user_blog_post_tree"/>
+            <field name="act_window" ref="act_nereid_user_blog_post_view_form"/>
+        </record>
+
+        <menuitem name="Blog Posts"
+            parent="nereid.menu_nereid"
+            id="menu_nereid_user_blog_post"
+            sequence="100"/>
+
+        <menuitem parent="menu_nereid_user_blog_post"
+            action="act_nereid_user_blog_post_view_form"
+            id="menu_nereid_user_blog_post_list"
+            sequence="20" icon="tryton-list"/>
+
+        <!-- Nereid User Blog Posts Comments -->
+        <record model="ir.ui.view" id="nereid_user_blog_post_comment_form">
+            <field name="model">blog.post.comment</field>
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+                <![CDATA[
+                <form string="Blog Post Comment">
+                    <label name="post"/>
+                    <field name="post"/>
+                    <label name="nereid_user"/>
+                    <field name="nereid_user"/>
+                    <label name="name"/>
+                    <field name="name"/>
+                    <label name="create_date"/>
+                    <field name="create_date"/>
+                    <label name="is_spam"/>
+                    <field name="is_spam"/>
+                    <newline/>
+                    <field name="content" colspan="4"/>
+                </form>
+                ]]>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="nereid_user_blog_post_comment_tree">
+            <field name="model">blog.post.comment</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <![CDATA[
+                <tree string="Blog Post Comments">
+                    <field name="post"/>
+                    <field name="nereid_user"/>
+                    <field name="name"/>
+                    <field name="create_date"/>
+                    <field name="is_spam"/>
+                </tree>
+                ]]>
+            </field>
+        </record>
+
+    </data>
+</tryton>
