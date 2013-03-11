@@ -10,10 +10,13 @@
 from datetime import datetime
 
 from wtforms import Form, TextField, TextAreaField, BooleanField, validators
+from wtfrecaptcha.fields import RecaptchaField
 from trytond.model import ModelSQL, ModelView, Workflow, fields
 from trytond.pyson import Bool, Eval
+from trytond.config import CONFIG
 from nereid import (request, abort, render_template, login_required, url_for,
     redirect, flash, jsonify)
+from nereid.contrib.pagination import Pagination
 from nereid.helpers import slugify
 
 
@@ -32,6 +35,16 @@ class PostCommentForm(Form):
     "Post Comment Form"
     name = TextField('Name', [validators.Required(),])
     content = TextAreaField('Content', [validators.Required(),])
+
+
+class GuestCommentForm(PostCommentForm):
+    "Add captcha if a guest is commenting"
+    if 're_captcha_public' in CONFIG.options:
+        captcha = RecaptchaField(
+            public_key=CONFIG.options['re_captcha_public'],
+            private_key=CONFIG.options['re_captcha_private'],
+            secure=True
+        )
 
 
 class BlogPost(Workflow, ModelSQL, ModelView):
@@ -92,6 +105,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                 'invisible': Eval('state') != 'Published',
             }
         })
+        self.per_page = 10
 
     @ModelView.button
     @Workflow.transition('Draft')
@@ -123,9 +137,23 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         post_form = BlogPostForm(request.form)
 
         if request.method == 'POST' and post_form.validate():
+            # Search for a post with same uri
+            uri = post_form.uri.data or slugify(post_form.title.data)
+            existing_post = self.search([
+                ('uri', '=', uri),
+                ('nereid_user', '=', request.nereid_user.id),
+            ])
+            if existing_post:
+                flash(
+                    'A post with same URL exists. '
+                    'Please change the title or modify the URL'
+                )
+                return redirect(request.referrer)
             post_id = self.create({
                 'title': post_form.title.data,
+                'uri': uri,
                 'content': post_form.content.data,
+                'nereid_user': request.nereid_user.id,
                 'state': 'Published' if post_form.publish.data else 'Draft'
             })
             if post_form.publish.data:
@@ -133,18 +161,147 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             else:
                 flash('Your post has been saved.')
 
+            post = self.browse(post_id)
+
             return redirect(url_for(
-                'blog.post.render', post_id=post_id
+                'blog.post.render', user_id=post.nereid_user.id,
+                uri=post.uri
             ))
         return render_template('blog_post_form.jinja', form=post_form)
 
-    def render(self, post_id):
-        "Render the blog post"
-        post = self.browse(post_id)
-        if not post:
+    @login_required
+    def edit_post(self, uri):
+        """Edit an existing post
+        """
+        # Search for a post with same uri
+        post_ids = self.search([
+            ('uri', '=', uri),
+            ('nereid_user', '=', request.nereid_user.id),
+        ])
+
+        if not post_ids:
             abort(404)
 
-        return render_template('blog_post.jinja', post=post)
+        post = self.browse(post_ids[0])
+        post_form = BlogPostForm(request.form, obj=post)
+
+        if request.method == 'POST' and post_form.validate():
+            self.write(post.id, {
+                'title': post_form.title.data,
+                'uri': uri,
+                'content': post_form.content.data,
+            })
+            flash('Your post has been updated.')
+
+            # Reload the browse record
+            post = self.browse(post.id)
+
+            return redirect(url_for(
+                'blog.post.render', user_id=post.nereid_user.id,
+                uri=post.uri
+            ))
+        return render_template('blog_post_edit.jinja', form=post_form)
+
+    @login_required
+    def change_state(self, uri):
+        "Change the state of the post"
+        post_ids = self.search([
+            ('uri', '=', uri),
+            ('nereid_user', '=', request.nereid_user.id),
+        ])
+
+        if not post_ids:
+            abort(404)
+
+        if request.method == 'POST':
+            state = request.form.get('state')
+            getattr(self, str(state))(post_ids)
+
+            post = self.browse(post_ids[0])
+
+            if request.is_xhr:
+                return jsonify({
+                    'success': True,
+                    'message': 'Your post is now %s' % post.state
+                })
+            else:
+                flash('Your post is now %s' % post.state)
+                return redirect(url_for(
+                    'blog.post.render', user_id=post.nereid_user.id,
+                    uri=post.uri
+                ))
+
+    def render(self, user_id, uri):
+        "Render the blog post"
+        comment_form = PostCommentForm()
+
+        post_ids = self.search([
+            ('nereid_user', '=', user_id),
+            ('uri', '=', uri),
+        ])
+        if not post_ids:
+            abort(404)
+
+        # if only one post is found then it is rendered and 
+        # if more than one are found then the first one is rendered
+        post = self.browse(post_ids[0])
+
+        return render_template(
+            'blog_post.jinja', post=post, comment_form=comment_form
+        )
+
+    def render_list(self, user_id=None, page=1):
+        "Render the blog posts for a user"
+        if not user_id:
+            user_id = request.nereid_user.id
+
+        posts = Pagination(self, [
+            ('nereid_user', '=', user_id),
+        ], page, self.per_page)
+
+        return render_template('blog_post_list.jinja', posts=posts)
+
+    def add_comment(self, user_id, uri):
+        "Add a comment"
+        # Add re_captcha if the configuration has such an option and user
+        # is guest
+        if 're_captcha_public' in CONFIG.options and request.is_guest_user:
+            comment_form = GuestCommentForm(
+                request.form, captcha={'ip_address': request.remote_addr}
+            )
+        else:
+            comment_form = PostCommentForm(request.form)
+
+        # Comments can only be added to published posts
+        post_ids = self.search([
+            ('nereid_user', '=', user_id),
+            ('uri', '=', uri),
+            ('state', '=', 'Published'),
+        ], limit=1)
+        if not post_ids:
+            abort(404)
+
+        post = self.browse(post_ids[0])
+
+        # If post does not allow guest comments,
+        # then dont allow guest user to comment
+        if not post.allow_guest_comments and request.is_guest_user:
+            abort(403)
+
+        if request.method == 'POST' and comment_form.validate():
+            self.write(post.id, {
+                'comments': [('create', {
+                    'nereid_user': request.nereid_user.id,
+                    'name': comment_form.name.data,
+                    'content': comment_form.content.data,
+                })]
+            })
+
+        if request.is_xhr:
+            return jsonify({
+                'success': True,
+            })
+        return redirect(request.referrer)
 
 BlogPost()
 
@@ -166,5 +323,35 @@ class BlogPostComment(ModelSQL, ModelView):
     })
     content = fields.Text('Content', required=True)
     create_date = fields.DateTime('Create Date', readonly=True)
+    is_spam = fields.Boolean('Is Spam ?')
+
+    def default_is_spam(self):
+        return False
+
+    @login_required
+    def manage_spam(self, comment_id):
+        "Mark the comment as spam"
+        comment = self.browse(comment_id)
+
+        if not comment:
+            abort(404)
+
+        if not comment.post.nereid_user == request.nereid_user:
+            abort(403)
+
+        self.write(comment.id, {
+            'is_spam': request.form.get('spam', False, type=bool)
+        })
+
+        if request.is_xhr:
+            return jsonify({
+                'success': True,
+            })
+        else:
+            flash('The comment has been updated')
+            return redirect(url_for(
+                'blog.post.render', user_id=comment.post.nereid_user.id,
+                uri=comment.post.uri
+            ))
 
 BlogPostComment()

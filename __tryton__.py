@@ -14,6 +14,7 @@
     ],
     'xml': [
         "blog.xml",
+        "urls.xml",
     ],
     'translation': [
     ],
