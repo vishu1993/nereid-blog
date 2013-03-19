@@ -13,6 +13,7 @@ from wtforms import Form, TextField, TextAreaField, BooleanField, validators
 from wtfrecaptcha.fields import RecaptchaField
 from trytond.model import ModelSQL, ModelView, Workflow, fields
 from trytond.pyson import Bool, Eval
+from trytond.pool import Pool
 from trytond.config import CONFIG
 from nereid import (request, abort, render_template, login_required, url_for,
     redirect, flash, jsonify)
@@ -29,6 +30,7 @@ class BlogPostForm(Form):
     uri = TextField('URL')
     content = TextAreaField('Content', [validators.Required(),])
     publish = BooleanField('Publish', default=False)
+    allow_guest_comments = BooleanField('Allow Guest Comments ?', default=True)
 
 
 class PostCommentForm(Form):
@@ -71,6 +73,11 @@ class BlogPost(Workflow, ModelSQL, ModelView):
     comments = fields.One2Many(
         'blog.post.comment', 'post', 'Comments'
     )
+    published_comments = fields.Function(
+        fields.One2Many(
+            'blog.post.comment', None, 'Published Comments'
+        ), 'get_published_comments'
+    )
     state = fields.Selection([
         ('Draft', 'Draft'),
         ('Published', 'Published'),
@@ -79,6 +86,19 @@ class BlogPost(Workflow, ModelSQL, ModelView):
 
     def default_state(self):
         return 'Draft'
+
+    def get_published_comments(self, ids, name):
+        "Returns the published comments, i.e., comments not marked as spam"
+        comment_obj = Pool().get('blog.post.comment')
+
+        res = {}
+        for post in self.browse(ids):
+            comments = comment_obj.search([
+                ('post', '=', post.id),
+                ('is_spam', '=', False)
+            ])
+            res[post.id] = comments
+        return res
 
     def __init__(self):
         super(BlogPost, self).__init__()
@@ -154,7 +174,8 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                 'uri': uri,
                 'content': post_form.content.data,
                 'nereid_user': request.nereid_user.id,
-                'state': 'Published' if post_form.publish.data else 'Draft'
+                'state': 'Published' if post_form.publish.data else 'Draft',
+                'allow_guest_comments': post_form.allow_guest_comments.data,
             })
             if post_form.publish.data:
                 flash('Your post has been published.')
@@ -190,6 +211,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                 'title': post_form.title.data,
                 'uri': uri,
                 'content': post_form.content.data,
+                'allow_guest_comments': post_form.allow_guest_comments.data,
             })
             flash('Your post has been updated.')
 
@@ -200,7 +222,9 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                 'blog.post.render', user_id=post.nereid_user.id,
                 uri=post.uri
             ))
-        return render_template('blog_post_edit.jinja', form=post_form)
+        return render_template(
+            'blog_post_edit.jinja', form=post_form, post=post
+        )
 
     @login_required
     def change_state(self, uri):
@@ -233,10 +257,19 @@ class BlogPost(Workflow, ModelSQL, ModelView):
 
     def render(self, user_id, uri):
         "Render the blog post"
-        comment_form = PostCommentForm()
+        nereid_user_obj = Pool().get('nereid.user')
+
+        if 're_captcha_public' in CONFIG.options and request.is_guest_user:
+            comment_form = GuestCommentForm(
+                captcha={'ip_address': request.remote_addr}
+            )
+        else:
+            comment_form = PostCommentForm()
+
+        user = nereid_user_obj.browse(user_id)
 
         post_ids = self.search([
-            ('nereid_user', '=', user_id),
+            ('nereid_user', '=', user.id),
             ('uri', '=', uri),
         ])
         if not post_ids:
@@ -246,20 +279,41 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         # if more than one are found then the first one is rendered
         post = self.browse(post_ids[0])
 
+        if not (post.state == 'Published' or \
+                request.nereid_user == post.nereid_user):
+            abort(403)
+
         return render_template(
-            'blog_post.jinja', post=post, comment_form=comment_form
+            'blog_post.jinja', post=post, comment_form=comment_form,
+            poster=user
         )
 
-    def render_list(self, user_id=None, page=1):
-        "Render the blog posts for a user"
-        if not user_id:
-            user_id = request.nereid_user.id
+    def render_list(self, user_id, page=1):
+        """Render the blog posts for a user
+        This should render the list of only published posts of the user
+        """
+        nereid_user_obj = Pool().get('nereid.user')
+
+        user = nereid_user_obj.browse(user_id)
 
         posts = Pagination(self, [
-            ('nereid_user', '=', user_id),
+            ('nereid_user', '=', user.id),
+            ('state', '=', 'Published'),
         ], page, self.per_page)
 
-        return render_template('blog_post_list.jinja', posts=posts)
+        return render_template(
+            'blog_posts.jinja', posts=posts, poster=user
+        )
+
+    @login_required
+    def my_posts(self, page=1):
+        """Render all the posts of the logged in user
+        """
+        posts = Pagination(self, [
+            ('nereid_user', '=', request.nereid_user.id),
+        ], page, self.per_page)
+
+        return render_template('my_blog_posts.jinja', posts=posts)
 
     def add_comment(self, user_id, uri):
         "Add a comment"
@@ -286,7 +340,10 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         # If post does not allow guest comments,
         # then dont allow guest user to comment
         if not post.allow_guest_comments and request.is_guest_user:
-            abort(403)
+            flash('Guests are not allowed to write comments')
+            return redirect(url_for(
+                'blog.post.render', user_id=post.nereid_user.id, uri=post.uri
+            ))
 
         if request.method == 'POST' and comment_form.validate():
             self.write(post.id, {
@@ -301,7 +358,9 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             return jsonify({
                 'success': True,
             })
-        return redirect(request.referrer)
+        return redirect(url_for(
+            'blog.post.render', user_id=post.nereid_user.id, uri=post.uri
+        ))
 
 BlogPost()
 

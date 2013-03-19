@@ -54,7 +54,15 @@
 
         <record id="render_my_post_list" model="nereid.url_rule">
             <field name="rule">/&lt;language&gt;/posts/-my</field>
-            <field name="endpoint">blog.post.render_list</field>
+            <field name="endpoint">blog.post.my_posts</field>
+            <field name="sequence" eval="50" />
+            <field name="http_method_get" eval="True"/>
+            <field name="url_map" ref="nereid.default_url_map" />
+        </record>
+
+        <record id="render_my_post_list_page" model="nereid.url_rule">
+            <field name="rule">/&lt;language&gt;/posts/-my/&lt;int:page&gt;</field>
+            <field name="endpoint">blog.post.my_posts</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
             <field name="url_map" ref="nereid.default_url_map" />
