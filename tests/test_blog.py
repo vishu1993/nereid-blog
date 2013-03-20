@@ -39,8 +39,10 @@ class TestNereidBlog(NereidTestCase):
         self.templates = {
             'localhost/blog_post_form.jinja': \
                 '{{ form.errors }} {{ get_flashed_messages() }}',
-            'localhost/blog_post.jinja': '{{ post.title }} {{ post.content }}',
-            'localhost/blog_post_list.jinja': '{{ posts|count }}',
+            'localhost/blog_post.jinja': '{{ post.title }} {{ post.content }}'
+                '{{ get_flashed_messages() }}',
+            'localhost/blog_posts.jinja': '{{ posts|count }}',
+            'localhost/my_blog_posts.jinja': '{{ posts|count }}',
             'localhost/blog_post_edit.jinja': \
                 '{{ form.errors }} {{ get_flashed_messages() }}',
         }
@@ -185,6 +187,11 @@ class TestNereidBlog(NereidTestCase):
                 post_ids = self.blog_post_obj.search([])
                 self.assertEqual(len(post_ids), 1)
 
+                # Publish this post
+                post = self.blog_post_obj.browse(post_ids[0])
+                self.blog_post_obj.publish(post_ids)
+                self.assertEqual(post.state, 'Published')
+
                 # Create a new blog with same URI
                 rv = c.post('/en_US/post/-new', data={
                     'title': 'This is a blog post',
@@ -207,7 +214,8 @@ class TestNereidBlog(NereidTestCase):
                 # Get the list of Blogs
                 rv = c.get('/en_US/posts/%s/1' % self.registered_user_id)
                 self.assertEqual(rv.status_code, 200)
-                self.assertEqual(rv.data, '2')
+                # This should show only 1 as only 1 has been published
+                self.assertEqual(rv.data, '1')
 
                 # Get the list of user's blogs [My blogs]
                 rv = c.get('/en_US/posts/-my')
@@ -323,7 +331,9 @@ class TestNereidBlog(NereidTestCase):
                         'content': 'This is an awesome post'
                     }, headers=[('X-Requested-With', 'XMLHttpRequest')]
                 )
-                self.assertEqual(rv.status_code, 403)
+                self.assertEqual(rv.status_code, 302)
+                post = self.blog_post_obj.browse(post_ids[0])
+                self.assertEqual(len(post.comments), 0)
 
                 # login as another user
                 c.post('/en_US/login', data={
@@ -345,6 +355,8 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(len(comment_ids), 1)
                 comment = self.blog_post_comment_obj.browse(comment_ids[0])
                 self.assertFalse(comment.is_spam)
+                post = self.blog_post_obj.browse(post_ids[0])
+                self.assertEqual(len(post.published_comments), 1)
 
                 # try to modify the comment as not the owner of post
                 rv = c.post('/en_US/comment/%s/-spam' % comment.id, data={
@@ -366,6 +378,8 @@ class TestNereidBlog(NereidTestCase):
                 self.assertTrue(rv.status_code, 200)
                 comment = self.blog_post_comment_obj.browse(comment.id)
                 self.assertTrue(comment.is_spam)
+                post = self.blog_post_obj.browse(post_ids[0])
+                self.assertEqual(len(post.published_comments), 0)
 
 
 def suite():
