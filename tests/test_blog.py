@@ -148,6 +148,7 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(len(post_ids), 1)
                 post = self.blog_post_obj.browse(post_ids[0])
                 self.assertEqual(post.state, 'Draft')
+                self.assertFalse(post.post_date)
 
                 self.blog_post_obj.publish(post_ids)
                 self.assertEqual(post.state, 'Published')
@@ -159,6 +160,42 @@ class TestNereidBlog(NereidTestCase):
 
                 self.blog_post_obj.archive(post_ids)
                 self.assertEqual(post.state, 'Archived')
+
+    def test_0025_create_blog_in_published_state(self):
+        "Login and create a blog and publish directly"
+        with Transaction().start(DB_NAME, USER, CONTEXT):
+            self.setup_defaults()
+            app = self.get_app()
+
+            with app.test_client() as c:
+                c.post('/en_US/login', data={
+                    'email': 'email@example.com',
+                    'password': 'password',
+                })
+                rv = c.get('/en_US/post/-new')
+                self.assertEqual(rv.status_code, 200)
+
+                rv = c.post('/en_US/post/-new', data={})
+                self.assertTrue('title' in rv.data)
+                self.assertTrue('content' in rv.data)
+
+                rv = c.post('/en_US/post/-new', data={
+                    'title': 'This is a blog post',
+                    'content': 'Some test content',
+                    'publish': True,
+                })
+                self.assertEqual(rv.status_code, 302)
+                post_ids = self.blog_post_obj.search([])
+                self.assertEqual(len(post_ids), 1)
+                post = self.blog_post_obj.browse(post_ids[0])
+
+                self.assertEqual(post.state, 'Published')
+                self.assertTrue(post.post_date)
+
+                rv = c.get('/en_US/post/%s/%s' % (
+                    self.registered_user_id, 'this-is-a-blog-post'
+                ))
+                self.assertEqual(rv.status_code, 200)
 
     def test_0030_create_blog_with_same_uri(self):
         "Login and create a blog with same URI and it should not create a new"

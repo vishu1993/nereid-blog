@@ -174,10 +174,10 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                 'uri': uri,
                 'content': post_form.content.data,
                 'nereid_user': request.nereid_user.id,
-                'state': 'Published' if post_form.publish.data else 'Draft',
                 'allow_guest_comments': post_form.allow_guest_comments.data,
             })
             if post_form.publish.data:
+                self.publish([post_id])
                 flash('Your post has been published.')
             else:
                 flash('Your post has been saved.')
