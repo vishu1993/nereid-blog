@@ -52,7 +52,8 @@ class RunAudit(Command):
         pass
 
     def run(self):
-        import os, sys
+        import os
+        import sys
         try:
             import pyflakes.scripts.pyflakes as flakes
         except ImportError:
@@ -67,7 +68,7 @@ class RunAudit(Command):
                 if root.startswith(('./build')):
                     continue
                 for file in files:
-                    if file != '__init__.py' and file.endswith('.py') :
+                    if file != '__init__.py' and file.endswith('.py'):
                         warns += flakes.checkPath(os.path.join(root, file))
         if warns > 0:
             print "Audit finished with total %d warnings." % warns
@@ -83,30 +84,35 @@ minor_version = int(minor_version)
 requires = []
 for dep in info.get('depends', []):
     if not re.match(r'(ir|res|webdav)(\W|$)', dep):
-        requires.append('trytond_%s >= %s.%s, < %s.%s' %
-                (dep, major_version, minor_version, major_version,
-                    minor_version + 1))
-requires.append('trytond >= %s.%s, < %s.%s' %
-        (major_version, minor_version, major_version, minor_version + 1))
+        requires.append(
+            'trytond_%s >= %s.%s, < %s.%s' %
+            (dep, major_version, minor_version, major_version,
+                minor_version + 1)
+        )
+requires.append(
+    'trytond >= %s.%s, < %s.%s' %
+    (major_version, minor_version, major_version, minor_version + 1)
+)
 
-setup(name='trytond_nereid_blog',
+setup(
+    name='trytond_nereid_blog',
     version=info.get('version', '0.0.1'),
     description=info.get('description', ''),
     author=info.get('author', ''),
     author_email=info.get('email', ''),
     url=info.get('website', ''),
-    download_url="http://downloads.openlabs.co.in/" + \
-            info.get('version', '0.0.1').rsplit('.', 1)[0] + '/',
+    download_url="http://downloads.openlabs.co.in/" +
+    info.get('version', '0.0.1').rsplit('.', 1)[0] + '/',
     package_dir={'trytond.modules.nereid_blog': '.'},
     packages=[
         'trytond.modules.nereid_blog',
         'trytond.modules.nereid_blog.tests',
     ],
     package_data={
-        'trytond.modules.nereid_blog': info.get('xml', []) \
-                + info.get('translation', []) \
-                + ['emails/*.html'] \
-                + ['i18n/*.pot', 'i18n/pt_BR/LC_MESSAGES/*'],
+        'trytond.modules.nereid_blog': info.get('xml', [])
+        + info.get('translation', [])
+        + ['emails/*.html']
+        + ['i18n/*.pot', 'i18n/pt_BR/LC_MESSAGES/*'],
     },
     classifiers=[
         'Development Status :: 4 - Beta',
