@@ -15,28 +15,30 @@ from trytond.model import ModelSQL, ModelView, Workflow, fields
 from trytond.pyson import Bool, Eval
 from trytond.pool import Pool
 from trytond.config import CONFIG
-from nereid import (request, abort, render_template, login_required, url_for,
-    redirect, flash, jsonify)
+from nereid import (
+    request, abort, render_template, login_required, url_for, redirect, flash,
+    jsonify,
+)
 from nereid.contrib.pagination import Pagination
 from nereid.helpers import slugify
 
 
-STATES = {'readonly': Eval('state') != 'Draft',}
+STATES = {'readonly': Eval('state') != 'Draft'}
 
 
 class BlogPostForm(Form):
     "Blog Post Form"
-    title = TextField('Title', [validators.Required(),])
+    title = TextField('Title', [validators.Required()])
     uri = TextField('URL')
-    content = TextAreaField('Content', [validators.Required(),])
+    content = TextAreaField('Content', [validators.Required()])
     publish = BooleanField('Publish', default=False)
     allow_guest_comments = BooleanField('Allow Guest Comments ?', default=True)
 
 
 class PostCommentForm(Form):
     "Post Comment Form"
-    name = TextField('Name', [validators.Required(),])
-    content = TextAreaField('Content', [validators.Required(),])
+    name = TextField('Name', [validators.Required()])
+    content = TextAreaField('Content', [validators.Required()])
 
 
 class GuestCommentForm(PostCommentForm):
@@ -55,11 +57,10 @@ class BlogPost(Workflow, ModelSQL, ModelView):
     _description = __doc__
     _rec_name = 'title'
 
-    title = fields.Char('Title', required=True, select=True,
-        states=STATES
-    )
-    uri = fields.Char('URI', required=True, select=True,
-        on_change_with=['title', 'uri'], states=STATES
+    title = fields.Char('Title', required=True, select=True, states=STATES)
+    uri = fields.Char(
+        'URI', required=True, select=True, on_change_with=['title', 'uri'],
+        states=STATES,
     )
     nereid_user = fields.Many2One(
         'nereid.user', 'Nereid User', required=True, select=True,
@@ -102,7 +103,8 @@ class BlogPost(Workflow, ModelSQL, ModelView):
 
     def __init__(self):
         super(BlogPost, self).__init__()
-        self._sql_constraints += [(
+        self._sql_constraints += [
+            (
                 'nereid_user_uri_uniq', 'UNIQUE(nereid_user, uri)',
                 'URI must be unique for a nereid user'
             ),
@@ -275,12 +277,14 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         if not post_ids:
             abort(404)
 
-        # if only one post is found then it is rendered and 
+        # if only one post is found then it is rendered and
         # if more than one are found then the first one is rendered
         post = self.browse(post_ids[0])
 
-        if not (post.state == 'Published' or \
-                request.nereid_user == post.nereid_user):
+        if not (
+            post.state == 'Published' or
+            request.nereid_user == post.nereid_user
+        ):
             abort(403)
 
         return render_template(
@@ -375,11 +379,13 @@ class BlogPostComment(ModelSQL, ModelView):
         'blog.post', 'Blog Post', required=True, select=True
     )
     nereid_user = fields.Many2One('nereid.user', 'Nereid User')
-    name = fields.Char('Name', select=True, depends=['nereid_user'],
+    name = fields.Char(
+        'Name', select=True, depends=['nereid_user'],
         states={
             'required': ~Eval('nereid_user'),
             'invisible': Bool(Eval('nereid_user')),
-    })
+        }
+    )
     content = fields.Text('Content', required=True)
     create_date = fields.DateTime('Create Date', readonly=True)
     is_spam = fields.Boolean('Is Spam ?')

@@ -7,8 +7,9 @@
 """
 import sys
 import os
-DIR = os.path.abspath(os.path.normpath(os.path.join(__file__,
-    '..', '..', '..', '..', '..', 'trytond')))
+DIR = os.path.abspath(os.path.normpath(
+    os.path.join(__file__, '..', '..', '..', '..', '..', 'trytond')
+))
 if os.path.isdir(DIR):
     sys.path.insert(0, os.path.dirname(DIR))
 
@@ -37,14 +38,14 @@ class TestNereidBlog(NereidTestCase):
         self.blog_post_comment_obj = POOL.get('blog.post.comment')
 
         self.templates = {
-            'localhost/blog_post_form.jinja': \
-                '{{ form.errors }} {{ get_flashed_messages() }}',
+            'localhost/blog_post_form.jinja':
+            '{{ form.errors }} {{ get_flashed_messages() }}',
             'localhost/blog_post.jinja': '{{ post.title }} {{ post.content }}'
-                '{{ get_flashed_messages() }}',
+            '{{ get_flashed_messages() }}',
             'localhost/blog_posts.jinja': '{{ posts|count }}',
             'localhost/my_blog_posts.jinja': '{{ posts|count }}',
-            'localhost/blog_post_edit.jinja': \
-                '{{ form.errors }} {{ get_flashed_messages() }}',
+            'localhost/blog_post_edit.jinja':
+            '{{ form.errors }} {{ get_flashed_messages() }}',
         }
 
     def get_template_source(self, name):
@@ -109,7 +110,6 @@ class TestNereidBlog(NereidTestCase):
             'guest_user': guest_user,
             'currencies': [('set', [usd])],
         })
-
 
     def test_0010_guest_cannot_create_blogs(self):
         "Guests cannot create blogs so blow up"
@@ -287,7 +287,8 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(len(post_ids), 1)
 
                 # Edit the post
-                rv = c.post('/en_US/post/%s/-edit' % 'this-is-a-blog-post',
+                rv = c.post(
+                    '/en_US/post/%s/-edit' % 'this-is-a-blog-post',
                     data={
                         'title': 'This is a blog post edited',
                         'content': 'Some test content'
@@ -301,9 +302,9 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(post.state, 'Draft')
 
                 # Publish the blog via web request
-                rv = c.post('/en_US/post/%s/-change-state' \
-                    % 'this-is-a-blog-post',
-                    data = {
+                rv = c.post(
+                    '/en_US/post/%s/-change-state' % 'this-is-a-blog-post',
+                    data={
                         'state': 'publish'
                     }
                 )
@@ -311,9 +312,9 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(post.state, 'Published')
 
                 # Archive the blog via web request
-                rv = c.post('/en_US/post/%s/-change-state' \
-                    % 'this-is-a-blog-post',
-                    data = {
+                rv = c.post(
+                    '/en_US/post/%s/-change-state' % 'this-is-a-blog-post',
+                    data={
                         'state': 'archive'
                     }
                 )
@@ -348,9 +349,9 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(len(post_ids), 1)
 
                 # Publish the blog via web request
-                rv = c.post('/en_US/post/%s/-change-state' \
-                    % 'this-is-a-blog-post',
-                    data = {
+                rv = c.post(
+                    '/en_US/post/%s/-change-state' % 'this-is-a-blog-post',
+                    data={
                         'state': 'publish'
                     }
                 )
@@ -361,7 +362,8 @@ class TestNereidBlog(NereidTestCase):
                 c.get('/en_US/logout')
 
                 # Comment on the above post
-                rv = c.post('/en_US/post/%s/%s/-comment' % (
+                rv = c.post(
+                    '/en_US/post/%s/%s/-comment' % (
                         self.registered_user_id, 'this-is-a-blog-post'
                     ), data={
                         'name': 'John Doe',
@@ -379,7 +381,8 @@ class TestNereidBlog(NereidTestCase):
                 })
 
                 # Comment on the above post
-                rv = c.post('/en_US/post/%s/%s/-comment' % (
+                rv = c.post(
+                    '/en_US/post/%s/%s/-comment' % (
                         self.registered_user_id, 'this-is-a-blog-post'
                     ), data={
                         'name': 'John Doe',
