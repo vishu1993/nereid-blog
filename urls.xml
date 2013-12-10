@@ -3,7 +3,7 @@
     <data>
 
         <record id="new_post" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/post/-new</field>
+            <field name="rule">/post/-new</field>
             <field name="endpoint">blog.post.new_post</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
@@ -12,7 +12,7 @@
         </record>
 
         <record id="edit_post" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/post/&lt;uri&gt;/-edit</field>
+            <field name="rule">/post/&lt;uri&gt;/-edit</field>
             <field name="endpoint">blog.post.edit_post</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
@@ -21,7 +21,7 @@
         </record>
 
         <record id="change-post_state" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/post/&lt;uri&gt;/-change-state</field>
+            <field name="rule">/post/&lt;uri&gt;/-change-state</field>
             <field name="endpoint">blog.post.change_state</field>
             <field name="sequence" eval="50" />
             <field name="http_method_post" eval="True"/>
@@ -29,7 +29,7 @@
         </record>
 
         <record id="render_post" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/post/&lt;int:user_id&gt;/&lt;uri&gt;</field>
+            <field name="rule">/post/&lt;int:user_id&gt;/&lt;uri&gt;</field>
             <field name="endpoint">blog.post.render</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
@@ -37,7 +37,7 @@
         </record>
 
         <record id="render_post_list" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/posts/&lt;int:user_id&gt;</field>
+            <field name="rule">/posts/&lt;int:user_id&gt;</field>
             <field name="endpoint">blog.post.render_list</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
@@ -45,7 +45,7 @@
         </record>
 
         <record id="render_post_list_page" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/posts/&lt;int:user_id&gt;/&lt;int:page&gt;</field>
+            <field name="rule">/posts/&lt;int:user_id&gt;/&lt;int:page&gt;</field>
             <field name="endpoint">blog.post.render_list</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
@@ -53,7 +53,7 @@
         </record>
 
         <record id="render_my_post_list" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/posts/-my</field>
+            <field name="rule">/posts/-my</field>
             <field name="endpoint">blog.post.my_posts</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
@@ -61,7 +61,7 @@
         </record>
 
         <record id="render_my_post_list_page" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/posts/-my/&lt;int:page&gt;</field>
+            <field name="rule">/posts/-my/&lt;int:page&gt;</field>
             <field name="endpoint">blog.post.my_posts</field>
             <field name="sequence" eval="50" />
             <field name="http_method_get" eval="True"/>
@@ -69,7 +69,7 @@
         </record>
 
         <record id="post_comment" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/post/&lt;int:user_id&gt;/&lt;uri&gt;/-comment</field>
+            <field name="rule">/post/&lt;int:user_id&gt;/&lt;uri&gt;/-comment</field>
             <field name="endpoint">blog.post.add_comment</field>
             <field name="sequence" eval="50" />
             <field name="http_method_post" eval="True"/>
@@ -77,7 +77,7 @@
         </record>
 
         <record id="manage_spam" model="nereid.url_rule">
-            <field name="rule">/&lt;language&gt;/comment/&lt;int:comment_id&gt;/-spam</field>
+            <field name="rule">/comment/&lt;int:active_id&gt;/-spam</field>
             <field name="endpoint">blog.post.comment.manage_spam</field>
             <field name="sequence" eval="50" />
             <field name="http_method_post" eval="True"/>
