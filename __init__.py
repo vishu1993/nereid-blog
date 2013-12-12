@@ -5,7 +5,19 @@
     Blog Module for Nereid
 
     :copyright: (c) 2013 by Openlabs Technologies & Consulting (P) Limited
-    :license: GPLv3, see LICENSE for more details.
+    :license: BSD, see LICENSE for more details.
 """
-# flake8: noqa
-import blog
+from blog import BlogPost, BlogPostComment
+
+from trytond.pool import Pool
+
+
+def register():
+    '''
+        Register classes
+    '''
+    Pool.register(
+        BlogPost,
+        BlogPostComment,
+        module='nereid_blog', type_='model'
+    )

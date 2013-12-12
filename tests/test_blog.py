@@ -28,14 +28,17 @@ class TestNereidBlog(NereidTestCase):
 
     def setUp(self):
         trytond.tests.test_tryton.install_module('nereid_blog')
-        self.currency_obj = POOL.get('currency.currency')
-        self.nereid_website_obj = POOL.get('nereid.website')
-        self.company_obj = POOL.get('company.company')
-        self.nereid_user_obj = POOL.get('nereid.user')
-        self.url_map_obj = POOL.get('nereid.url_map')
-        self.language_obj = POOL.get('ir.lang')
-        self.blog_post_obj = POOL.get('blog.post')
-        self.blog_post_comment_obj = POOL.get('blog.post.comment')
+        self.Currency = POOL.get('currency.currency')
+        self.Website = POOL.get('nereid.website')
+        self.Company = POOL.get('company.company')
+        self.NereidUser = POOL.get('nereid.user')
+        self.UrlMap = POOL.get('nereid.url_map')
+        self.Party = POOL.get('party.party')
+        self.Locale = POOL.get('nereid.website.locale')
+        self.Language = POOL.get('ir.lang')
+
+        self.BlogPost = POOL.get('blog.post')
+        self.BlogPostComment = POOL.get('blog.post.comment')
 
         self.templates = {
             'localhost/blog_post_form.jinja':
@@ -68,48 +71,67 @@ class TestNereidBlog(NereidTestCase):
 
     def setup_defaults(self):
         "Setup defaults"
-        usd = self.currency_obj.create({
+        currency, = self.Currency.create([{
             'name': 'US Dollar',
             'code': 'USD',
             'symbol': '$',
-        })
-        company_id = self.company_obj.create({
-            'name': 'Openlabs',
-            'currency': usd
-        })
-        guest_user = self.nereid_user_obj.create({
-            'name': 'Guest User',
+        }])
+        company_party, = self.Party.create([{
+            'name': 'openlabs'
+        }])
+        company, = self.Company.create([{
+            'party': company_party,
+            'currency': currency,
+        }])
+        guest_party, = self.Party.create([{
+            'name': 'Non registered user'
+        }])
+        guest_user, = self.NereidUser.create([{
+            'party': guest_party,
             'display_name': 'Guest User',
             'email': 'guest@openlabs.co.in',
-            'password': 'password',
-            'company': company_id,
-        })
-        self.registered_user_id = self.nereid_user_obj.create({
-            'name': 'Registered User',
+            'company': company,
+        }])
+
+        # Create Locale
+        en_us, = self.Language.search([('code', '=', 'en_US')])
+        locale_en_us, = self.Locale.create([{
+            'code': 'en_US',
+            'language': en_us,
+            'currency': currency,
+        }])
+
+        # Create website
+        url_map, = self.UrlMap.search([], limit=1)
+        self.Website.create([{
+            'name': 'localhost',
+            'url_map': url_map,
+            'company': company,
+            'application_user': USER,
+            'default_locale': locale_en_us,
+            'guest_user': guest_user,
+            'currencies': [('set', [currency])],
+        }])
+
+        # test party
+        test_party, = self.Party.create([{
+            'name': 'test party'
+        }])
+
+        self.registered_user, = self.NereidUser.create([{
+            'party': test_party,
             'display_name': 'Registered User',
             'email': 'email@example.com',
             'password': 'password',
-            'company': company_id,
-        })
-        self.registered_user_id2 = self.nereid_user_obj.create({
-            'name': 'Registered User 2',
+            'company': company,
+        }])
+        self.registered_user2, = self.NereidUser.create([{
+            'party': test_party,
             'display_name': 'Registered User ',
             'email': 'email2@example.com',
             'password': 'password2',
-            'company': company_id,
-        })
-        # Create website
-        url_map_id, = self.url_map_obj.search([], limit=1)
-        en_us, = self.language_obj.search([('code', '=', 'en_US')])
-        self.nereid_website_obj.create({
-            'name': 'localhost',
-            'url_map': url_map_id,
-            'company': company_id,
-            'application_user': USER,
-            'default_language': en_us,
-            'guest_user': guest_user,
-            'currencies': [('set', [usd])],
-        })
+            'company': company,
+        }])
 
     def test_0010_guest_cannot_create_blogs(self):
         "Guests cannot create blogs so blow up"
@@ -118,7 +140,7 @@ class TestNereidBlog(NereidTestCase):
             app = self.get_app()
 
             with app.test_client() as c:
-                rv = c.get('/en_US/post/-new')
+                rv = c.get('/post/-new')
                 self.assertEqual(rv.status_code, 302)
 
     def test_0020_create_blog(self):
@@ -128,37 +150,37 @@ class TestNereidBlog(NereidTestCase):
             app = self.get_app()
 
             with app.test_client() as c:
-                c.post('/en_US/login', data={
+                c.post('/login', data={
                     'email': 'email@example.com',
                     'password': 'password',
                 })
-                rv = c.get('/en_US/post/-new')
+                rv = c.get('/post/-new')
                 self.assertEqual(rv.status_code, 200)
 
-                rv = c.post('/en_US/post/-new', data={})
+                rv = c.post('/post/-new', data={})
                 self.assertTrue('title' in rv.data)
                 self.assertTrue('content' in rv.data)
 
-                rv = c.post('/en_US/post/-new', data={
+                rv = c.post('/post/-new', data={
                     'title': 'This is a blog post',
                     'content': 'Some test content'
                 })
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 1)
-                post = self.blog_post_obj.browse(post_ids[0])
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
+                post = posts[0]
                 self.assertEqual(post.state, 'Draft')
                 self.assertFalse(post.post_date)
 
-                self.blog_post_obj.publish(post_ids)
+                self.BlogPost.publish([post])
                 self.assertEqual(post.state, 'Published')
 
-                rv = c.get('/en_US/post/%s/%s' % (
-                    self.registered_user_id, 'this-is-a-blog-post'
+                rv = c.get('/post/%s/%s' % (
+                    self.registered_user.id, 'this-is-a-blog-post'
                 ))
                 self.assertEqual(rv.status_code, 200)
 
-                self.blog_post_obj.archive(post_ids)
+                self.BlogPost.archive([post])
                 self.assertEqual(post.state, 'Archived')
 
     def test_0025_create_blog_in_published_state(self):
@@ -168,32 +190,32 @@ class TestNereidBlog(NereidTestCase):
             app = self.get_app()
 
             with app.test_client() as c:
-                c.post('/en_US/login', data={
+                c.post('/login', data={
                     'email': 'email@example.com',
                     'password': 'password',
                 })
-                rv = c.get('/en_US/post/-new')
+                rv = c.get('/post/-new')
                 self.assertEqual(rv.status_code, 200)
 
-                rv = c.post('/en_US/post/-new', data={})
+                rv = c.post('/post/-new', data={})
                 self.assertTrue('title' in rv.data)
                 self.assertTrue('content' in rv.data)
 
-                rv = c.post('/en_US/post/-new', data={
+                rv = c.post('/post/-new', data={
                     'title': 'This is a blog post',
                     'content': 'Some test content',
                     'publish': True,
                 })
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 1)
-                post = self.blog_post_obj.browse(post_ids[0])
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
+                post = posts[0]
 
                 self.assertEqual(post.state, 'Published')
                 self.assertTrue(post.post_date)
 
-                rv = c.get('/en_US/post/%s/%s' % (
-                    self.registered_user_id, 'this-is-a-blog-post'
+                rv = c.get('/post/%s/%s' % (
+                    self.registered_user.id, 'this-is-a-blog-post'
                 ))
                 self.assertEqual(rv.status_code, 200)
 
@@ -204,58 +226,58 @@ class TestNereidBlog(NereidTestCase):
             app = self.get_app()
 
             with app.test_client() as c:
-                c.post('/en_US/login', data={
+                c.post('/login', data={
                     'email': 'email@example.com',
                     'password': 'password',
                 })
-                rv = c.get('/en_US/post/-new')
+                rv = c.get('/post/-new')
                 self.assertEqual(rv.status_code, 200)
 
-                rv = c.post('/en_US/post/-new', data={})
+                rv = c.post('/post/-new', data={})
                 self.assertTrue('title' in rv.data)
                 self.assertTrue('content' in rv.data)
 
                 # Create a new blog
-                rv = c.post('/en_US/post/-new', data={
+                rv = c.post('/post/-new', data={
                     'title': 'This is a blog post',
                     'content': 'Some test content'
                 })
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 1)
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
 
                 # Publish this post
-                post = self.blog_post_obj.browse(post_ids[0])
-                self.blog_post_obj.publish(post_ids)
+                post = posts[0]
+                self.BlogPost.publish([post])
                 self.assertEqual(post.state, 'Published')
 
                 # Create a new blog with same URI
-                rv = c.post('/en_US/post/-new', data={
+                rv = c.post('/post/-new', data={
                     'title': 'This is a blog post',
                     'content': 'Some test content',
                 })
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 1)
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
 
                 # Create a new blog with different URI
-                rv = c.post('/en_US/post/-new', data={
+                rv = c.post('/post/-new', data={
                     'title': 'This is a blog post',
                     'uri': 'this-is-a-blog-post-2',
                     'content': 'Some test content',
                 })
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 2)
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 2)
 
                 # Get the list of Blogs
-                rv = c.get('/en_US/posts/%s/1' % self.registered_user_id)
+                rv = c.get('/posts/%s/1' % self.registered_user.id)
                 self.assertEqual(rv.status_code, 200)
                 # This should show only 1 as only 1 has been published
                 self.assertEqual(rv.data, '1')
 
                 # Get the list of user's blogs [My blogs]
-                rv = c.get('/en_US/posts/-my')
+                rv = c.get('/posts/-my')
                 self.assertEqual(rv.status_code, 200)
                 self.assertEqual(rv.data, '2')
 
@@ -266,59 +288,59 @@ class TestNereidBlog(NereidTestCase):
             app = self.get_app()
 
             with app.test_client() as c:
-                c.post('/en_US/login', data={
+                c.post('/login', data={
                     'email': 'email@example.com',
                     'password': 'password',
                 })
-                rv = c.get('/en_US/post/-new')
+                rv = c.get('/post/-new')
                 self.assertEqual(rv.status_code, 200)
 
-                rv = c.post('/en_US/post/-new', data={})
+                rv = c.post('/post/-new', data={})
                 self.assertTrue('title' in rv.data)
                 self.assertTrue('content' in rv.data)
 
                 # Create a new blog
-                rv = c.post('/en_US/post/-new', data={
+                rv = c.post('/post/-new', data={
                     'title': 'This is a blog post',
                     'content': 'Some test content'
                 })
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 1)
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
 
                 # Edit the post
                 rv = c.post(
-                    '/en_US/post/%s/-edit' % 'this-is-a-blog-post',
+                    '/post/%s/-edit' % 'this-is-a-blog-post',
                     data={
                         'title': 'This is a blog post edited',
                         'content': 'Some test content'
                     }
                 )
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 1)
-                post = self.blog_post_obj.browse(post_ids[0])
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
+                post = posts[0]
                 self.assertEqual(post.title, 'This is a blog post edited')
                 self.assertEqual(post.state, 'Draft')
 
                 # Publish the blog via web request
                 rv = c.post(
-                    '/en_US/post/%s/-change-state' % 'this-is-a-blog-post',
+                    '/post/%s/-change-state' % 'this-is-a-blog-post',
                     data={
                         'state': 'publish'
                     }
                 )
-                post = self.blog_post_obj.browse(post_ids[0])
+                post = posts[0]
                 self.assertEqual(post.state, 'Published')
 
                 # Archive the blog via web request
                 rv = c.post(
-                    '/en_US/post/%s/-change-state' % 'this-is-a-blog-post',
+                    '/post/%s/-change-state' % 'this-is-a-blog-post',
                     data={
                         'state': 'archive'
                     }
                 )
-                post = self.blog_post_obj.browse(post_ids[0])
+                post = posts[0]
                 self.assertEqual(post.state, 'Archived')
 
     def test_0050_create_blog_n_comment(self):
@@ -328,62 +350,62 @@ class TestNereidBlog(NereidTestCase):
             app = self.get_app()
 
             with app.test_client() as c:
-                c.post('/en_US/login', data={
+                c.post('/login', data={
                     'email': 'email@example.com',
                     'password': 'password',
                 })
-                rv = c.get('/en_US/post/-new')
+                rv = c.get('/post/-new')
                 self.assertEqual(rv.status_code, 200)
 
-                rv = c.post('/en_US/post/-new', data={})
+                rv = c.post('/post/-new', data={})
                 self.assertTrue('title' in rv.data)
                 self.assertTrue('content' in rv.data)
 
                 # Create a new blog
-                rv = c.post('/en_US/post/-new', data={
+                rv = c.post('/post/-new', data={
                     'title': 'This is a blog post',
                     'content': 'Some test content'
                 })
                 self.assertEqual(rv.status_code, 302)
-                post_ids = self.blog_post_obj.search([])
-                self.assertEqual(len(post_ids), 1)
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
 
                 # Publish the blog via web request
                 rv = c.post(
-                    '/en_US/post/%s/-change-state' % 'this-is-a-blog-post',
+                    '/post/%s/-change-state' % 'this-is-a-blog-post',
                     data={
                         'state': 'publish'
                     }
                 )
-                post = self.blog_post_obj.browse(post_ids[0])
+                post = posts[0]
                 self.assertEqual(post.state, 'Published')
 
                 # Logout
-                c.get('/en_US/logout')
+                c.get('/logout')
 
                 # Comment on the above post
                 rv = c.post(
-                    '/en_US/post/%s/%s/-comment' % (
-                        self.registered_user_id, 'this-is-a-blog-post'
+                    '/post/%s/%s/-comment' % (
+                        self.registered_user.id, 'this-is-a-blog-post'
                     ), data={
                         'name': 'John Doe',
                         'content': 'This is an awesome post'
                     }, headers=[('X-Requested-With', 'XMLHttpRequest')]
                 )
                 self.assertEqual(rv.status_code, 302)
-                post = self.blog_post_obj.browse(post_ids[0])
+                post = posts[0]
                 self.assertEqual(len(post.comments), 0)
 
                 # login as another user
-                c.post('/en_US/login', data={
+                c.post('/login', data={
                     'email': 'email2@example.com',
                     'password': 'password2',
                 })
 
                 # Comment on the above post
                 rv = c.post(
-                    '/en_US/post/%s/%s/-comment' % (
-                        self.registered_user_id, 'this-is-a-blog-post'
+                    '/post/%s/%s/-comment' % (
+                        self.registered_user.id, 'this-is-a-blog-post'
                     ), data={
                         'name': 'John Doe',
                         'content': 'This is an awesome post'
@@ -391,34 +413,33 @@ class TestNereidBlog(NereidTestCase):
                 )
                 self.assertEqual(rv.status_code, 200)
 
-                comment_ids = self.blog_post_comment_obj.search([])
-                self.assertEqual(len(comment_ids), 1)
-                comment = self.blog_post_comment_obj.browse(comment_ids[0])
+                comments = self.BlogPostComment.search([])
+                self.assertEqual(len(comments), 1)
+                comment = comments[0]
                 self.assertFalse(comment.is_spam)
-                post = self.blog_post_obj.browse(post_ids[0])
+                post = posts[0]
                 self.assertEqual(len(post.published_comments), 1)
 
                 # try to modify the comment as not the owner of post
-                rv = c.post('/en_US/comment/%s/-spam' % comment.id, data={
+                rv = c.post('/comment/%s/-spam' % comment.id, data={
                     'spam': True
                 })
                 self.assertTrue(rv.status_code, 403)
 
                 # Logout and login as first user
-                c.get('/en_US/logout')
-                c.post('/en_US/login', data={
+                c.get('/logout')
+                c.post('/login', data={
                     'email': 'email@example.com',
                     'password': 'password',
                 })
 
                 # try to modify the comment as the owner of post
-                rv = c.post('/en_US/comment/%s/-spam' % comment.id, data={
+                rv = c.post('/comment/%s/-spam' % comment.id, data={
                     'spam': True
                 }, headers=[('X-Requested-With', 'XMLHttpRequest')])
                 self.assertTrue(rv.status_code, 200)
-                comment = self.blog_post_comment_obj.browse(comment.id)
                 self.assertTrue(comment.is_spam)
-                post = self.blog_post_obj.browse(post_ids[0])
+                post = posts[0]
                 self.assertEqual(len(post.published_comments), 0)
 
 
