@@ -4,17 +4,21 @@
 
     Blog
 
-    :copyright: (c) 2013 by Openlabs Technologies & Consulting (P) Limited
+    :copyright: (c) 2013-2014 by Openlabs Technologies & Consulting (P) Limited
     :license: BSD, see LICENSE for more details.
 """
+import warnings
 from datetime import datetime
 
 from wtforms import Form, TextField, TextAreaField, BooleanField, validators
+from wtforms.validators import ValidationError
 from wtfrecaptcha.fields import RecaptchaField
 from trytond.model import ModelSQL, ModelView, Workflow, fields
 from trytond.pyson import Bool, Eval
 from trytond.pool import Pool, PoolMeta
 from trytond.config import CONFIG
+from trytond.transaction import Transaction
+
 from nereid import (
     request, abort, render_template, login_required, url_for, redirect, flash,
     jsonify,
@@ -30,11 +34,27 @@ STATES = {'readonly': Eval('state') != 'Draft'}
 
 class BlogPostForm(Form):
     "Blog Post Form"
+
     title = TextField('Title', [validators.Required()])
     uri = TextField('URL')
     content = TextAreaField('Content', [validators.Required()])
     publish = BooleanField('Publish', default=False)
     allow_guest_comments = BooleanField('Allow Guest Comments ?', default=True)
+
+    def validate_uri(self, field):
+        BlogPost = Pool().get('blog.post')
+
+        if not field.data and not self.data['title']:
+            return
+        field.process_data(slugify(field.data or self.data['title']))
+        domain = [('uri', '=', field.data)]
+        if Transaction().context.get('blog_id'):
+            # blog_id in context means editing form
+            domain.append(('id', '!=', Transaction().context['blog_id']))
+        if BlogPost.search(domain):
+            raise ValidationError(
+                'Blog with the same URL exists. Please change title or modify'
+            )
 
 
 class PostCommentForm(Form):
@@ -151,6 +171,22 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             return slugify(self.title)
         return self.uri
 
+    def serialize(self):
+        '''
+        Return serializable dict for `self`
+        '''
+        return {
+            'id': self.id,
+            'title': self.title,
+            'uri': self.uri,
+            'post_date': self.post_date.isoformat()
+                if self.post_date else None,
+            'content': self.content,
+            'allow_guest_comments': self.allow_guest_comments,
+            'state': self.state,
+            'nereid_user': self.nereid_user.id
+        }
+
     @classmethod
     @login_required
     def new_post(cls):
@@ -159,21 +195,9 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         post_form = BlogPostForm(request.form)
 
         if request.method == 'POST' and post_form.validate():
-            # Search for a post with same uri
-            uri = post_form.uri.data or slugify(post_form.title.data)
-            existing_post = cls.search([
-                ('uri', '=', uri),
-                ('nereid_user', '=', request.nereid_user.id),
-            ])
-            if existing_post:
-                flash(
-                    'A post with same URL exists. '
-                    'Please change the title or modify the URL'
-                )
-                return redirect(request.referrer)
             post, = cls.create([{
                 'title': post_form.title.data,
-                'uri': uri,
+                'uri': post_form.uri.data,
                 'content': post_form.content.data,
                 'nereid_user': request.nereid_user.id,
                 'allow_guest_comments': post_form.allow_guest_comments.data,
@@ -184,10 +208,17 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             else:
                 flash('Your post has been saved.')
 
+            if request.is_xhr:
+                return jsonify(success=True, item=post.serialize())
             return redirect(url_for(
                 'blog.post.render', user_id=post.nereid_user.id,
                 uri=post.uri
             ))
+        if request.is_xhr:
+            return jsonify(
+                success=request.method != 'POST',  # False for POST, else True
+                errors=post_form.errors or None,
+            )
         return render_template('blog_post_form.jinja', form=post_form)
 
     @classmethod
@@ -207,18 +238,25 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         post = posts[0]
         post_form = BlogPostForm(request.form, obj=post)
 
-        if request.method == 'POST' and post_form.validate():
-            post.title = post_form.title.data
-            post.uri = uri
-            post.content = post_form.content.data
-            post.allow_guest_comments = post_form.allow_guest_comments.data
-            post.save()
-            flash('Your post has been updated.')
-
-            return redirect(url_for(
-                'blog.post.render', user_id=post.nereid_user.id,
-                uri=post.uri
-            ))
+        with Transaction().set_context(blog_id=post.id):
+            if request.method == 'POST' and post_form.validate():
+                post.title = post_form.title.data
+                post.uri = uri
+                post.content = post_form.content.data
+                post.allow_guest_comments = post_form.allow_guest_comments.data
+                post.save()
+                flash('Your post has been updated.')
+                if request.is_xhr:
+                    return jsonify(success=True, item=post.serialize())
+                return redirect(url_for(
+                    'blog.post.render', user_id=post.nereid_user.id,
+                    uri=post.uri
+                ))
+        if request.is_xhr:
+            return jsonify(
+                success=request.method != 'POST',  # False for POST, else True
+                errors=post_form.errors or None,
+            )
         return render_template(
             'blog_post_edit.jinja', form=post_form, post=post
         )
@@ -244,14 +282,13 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             if request.is_xhr:
                 return jsonify({
                     'success': True,
-                    'message': 'Your post is now %s' % post.state
+                    'new_state': post.state,
                 })
-            else:
-                flash('Your post is now %s' % post.state)
-                return redirect(url_for(
-                    'blog.post.render', user_id=post.nereid_user.id,
-                    uri=post.uri
-                ))
+            flash('Your post is now %s' % post.state)
+            return redirect(url_for(
+                'blog.post.render', user_id=post.nereid_user.id,
+                uri=post.uri
+            ))
 
     @classmethod
     def render(cls, user_id, uri):
@@ -282,6 +319,8 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                 request.nereid_user == post.nereid_user):
             abort(403)
 
+        if request.is_xhr:
+            return jsonify(post.serialize())
         return render_template(
             'blog_post.jinja', post=post, comment_form=comment_form,
             poster=user
@@ -300,6 +339,12 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             ('nereid_user', '=', user.id),
             ('state', '=', 'Published'),
         ], page, cls.per_page)
+        if request.is_xhr:
+            return jsonify({
+                'has_next': posts.has_next,
+                'has_prev': posts.has_prev,
+                'items': [post.serialize() for post in posts],
+            })
 
         return render_template(
             'blog_posts.jinja', posts=posts, poster=user
@@ -313,12 +358,34 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         posts = Pagination(self, [
             ('nereid_user', '=', request.nereid_user.id),
         ], page, self.per_page)
+        if request.is_xhr:
+            return jsonify({
+                'has_next': posts.has_next,
+                'has_prev': posts.has_prev,
+                'items': [post.serialize() for post in posts],
+            })
 
         return render_template('my_blog_posts.jinja', posts=posts)
 
     @classmethod
     def add_comment(cls, user_id, uri):
-        "Add a comment"
+        '''
+        Add a comment
+        '''
+        warnings.warn(
+            "add_comment will be deprecated in 3.2 use render_comment instead.",
+            DeprecationWarning,
+        )
+        return cls.render_comments(user_id, uri)
+
+    @classmethod
+    def render_comments(cls, user_id, uri):
+        """
+        Render comments
+
+        GET: Return json of all the comments of this post.
+        POST: Create new comment for this post.
+        """
         # Add re_captcha if the configuration has such an option and user
         # is guest
         if 're_captcha_public' in CONFIG.options and request.is_guest_user:
@@ -339,10 +406,25 @@ class BlogPost(Workflow, ModelSQL, ModelView):
 
         post = posts[0]
 
+        if request.method == 'GET':
+            if post.nereid_user == request.nereid_user:
+                return jsonify(comments=[
+                    comment.serialize() for comment in post.comments
+                ])
+            return jsonify(comments=[
+                comment.serialize() for comment in post.comments
+                if not comment.is_spam
+            ])
+
         # If post does not allow guest comments,
         # then dont allow guest user to comment
         if not post.allow_guest_comments and request.is_guest_user:
             flash('Guests are not allowed to write comments')
+            if request.is_xhr:
+                return jsonify(
+                    success=False,
+                    errors=['Guests are not allowed to write comments']
+                )
             return redirect(url_for(
                 'blog.post.render', user_id=post.nereid_user.id, uri=post.uri
             ))
@@ -357,9 +439,8 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             })
 
         if request.is_xhr:
-            return jsonify({
-                'success': True,
-            })
+            return jsonify(success=True) if comment_form.validate() \
+                else jsonify(success=False, errors=comment_form.errors)
         return redirect(url_for(
             'blog.post.render', user_id=post.nereid_user.id, uri=post.uri
         ))
@@ -388,6 +469,20 @@ class BlogPostComment(ModelSQL, ModelView):
     @staticmethod
     def default_is_spam():
         return False
+
+    def serialize(self):
+        """
+        Return Serializable dict. for this comment.
+        """
+        return {
+            'post': self.post.id,
+            'id': self.id,
+            'nereid_user': self.nereid_user.id,
+            'name': self.name,
+            'content': self.content,
+            'create_date': self.create_date.isoformat(),
+            'is_spam': self.is_spam,
+        }
 
     @login_required
     def manage_spam(self):

@@ -2,7 +2,7 @@
 """
      Nereid Blog
 
-    :copyright: (c) 2013 by Openlabs Technologies & Consulting (P) Limited
+    :copyright: (c) 2013-2014 by Openlabs Technologies & Consulting (P) Limited
     :license: BSD, see LICENSE for more details.
 """
 import sys
@@ -14,6 +14,7 @@ if os.path.isdir(DIR):
     sys.path.insert(0, os.path.dirname(DIR))
 
 import unittest
+import simplejson as json
 import trytond.tests.test_tryton
 from trytond.tests.test_tryton import test_view, test_depends, \
     POOL, USER, DB_NAME, CONTEXT
@@ -256,7 +257,7 @@ class TestNereidBlog(NereidTestCase):
                     'title': 'This is a blog post',
                     'content': 'Some test content',
                 })
-                self.assertEqual(rv.status_code, 302)
+                self.assertEqual(rv.status_code, 200)
                 posts = self.BlogPost.search([])
                 self.assertEqual(len(posts), 1)
 
@@ -307,6 +308,7 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(rv.status_code, 302)
                 posts = self.BlogPost.search([])
                 self.assertEqual(len(posts), 1)
+                self.assertEqual(posts[0].uri, 'this-is-a-blog-post')
 
                 # Edit the post
                 rv = c.post(
@@ -321,6 +323,7 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(len(posts), 1)
                 post = posts[0]
                 self.assertEqual(post.title, 'This is a blog post edited')
+                self.assertEqual(post.uri, 'this-is-a-blog-post')
                 self.assertEqual(post.state, 'Draft')
 
                 # Publish the blog via web request
@@ -392,7 +395,7 @@ class TestNereidBlog(NereidTestCase):
                         'content': 'This is an awesome post'
                     }, headers=[('X-Requested-With', 'XMLHttpRequest')]
                 )
-                self.assertEqual(rv.status_code, 302)
+                self.assertFalse(json.loads(rv.data)['success'])
                 post = posts[0]
                 self.assertEqual(len(post.comments), 0)
 
