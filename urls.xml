@@ -72,6 +72,7 @@
             <field name="rule">/post/&lt;int:user_id&gt;/&lt;uri&gt;/-comment</field>
             <field name="endpoint">blog.post.add_comment</field>
             <field name="sequence" eval="50" />
+            <field name="http_method_get" eval="True"/>
             <field name="http_method_post" eval="True"/>
             <field name="url_map" ref="nereid.default_url_map" />
         </record>
