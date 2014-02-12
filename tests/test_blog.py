@@ -326,6 +326,23 @@ class TestNereidBlog(NereidTestCase):
                 self.assertEqual(post.uri, 'this-is-a-blog-post')
                 self.assertEqual(post.state, 'Draft')
 
+                # Edit the post with id
+                rv = c.post(
+                    '/post/%d/-edit' % post.id,
+                    data={
+                        'title': 'This is a blog post edited2',
+                        'content': 'Some test content2'
+                    }
+                )
+                self.assertEqual(rv.status_code, 302)
+                posts = self.BlogPost.search([])
+                self.assertEqual(len(posts), 1)
+                post = posts[0]
+                self.assertEqual(post.title, 'This is a blog post edited2')
+                self.assertEqual(post.content, 'Some test content2')
+                self.assertEqual(post.uri, 'this-is-a-blog-post')
+                self.assertEqual(post.state, 'Draft')
+
                 # Publish the blog via web request
                 rv = c.post(
                     '/post/%s/-change-state' % 'this-is-a-blog-post',
@@ -345,6 +362,16 @@ class TestNereidBlog(NereidTestCase):
                 )
                 post = posts[0]
                 self.assertEqual(post.state, 'Archived')
+
+                # Draft the blog via web request
+                rv = c.post(
+                    '/post/%d/-change-state' % post.id,
+                    data={
+                        'state': 'draft'
+                    }
+                )
+                post = posts[0]
+                self.assertEqual(post.state, 'Draft')
 
     def test_0050_create_blog_n_comment(self):
         "Login and create a blog and comment on it"

@@ -222,11 +222,10 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         return render_template('blog_post_form.jinja', form=post_form)
 
     @classmethod
-    @login_required
-    def edit_post(cls, uri):
-        """Edit an existing post
+    def get_post_for_uri(cls, uri):
         """
-        # Search for a post with same uri
+            Return post for current user and uri
+        """
         posts = cls.search([
             ('uri', '=', uri),
             ('nereid_user', '=', request.nereid_user.id),
@@ -235,22 +234,39 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         if not posts:
             abort(404)
 
-        post = posts[0]
-        post_form = BlogPostForm(request.form, obj=post)
+        return posts[0]
 
-        with Transaction().set_context(blog_id=post.id):
+    @classmethod
+    @login_required
+    def edit_post_for_uri(cls, uri):
+        """
+            Edit an existing post from uri
+        """
+        return cls.get_post_for_uri(uri).edit_post()
+
+    @login_required
+    def edit_post(self):
+        """
+            Edit an existing post
+        """
+        if self.nereid_user != request.nereid_user:
+            abort(404)
+
+        # Search for a post with same uri
+        post_form = BlogPostForm(request.form, obj=self)
+
+        with Transaction().set_context(blog_id=self.id):
             if request.method == 'POST' and post_form.validate():
-                post.title = post_form.title.data
-                post.uri = uri
-                post.content = post_form.content.data
-                post.allow_guest_comments = post_form.allow_guest_comments.data
-                post.save()
+                self.title = post_form.title.data
+                self.content = post_form.content.data
+                self.allow_guest_comments = post_form.allow_guest_comments.data
+                self.save()
                 flash('Your post has been updated.')
                 if request.is_xhr:
-                    return jsonify(success=True, item=post.serialize())
+                    return jsonify(success=True, item=self.serialize())
                 return redirect(url_for(
-                    'blog.post.render', user_id=post.nereid_user.id,
-                    uri=post.uri
+                    'blog.post.render', user_id=self.nereid_user.id,
+                    uri=self.uri
                 ))
         if request.is_xhr:
             return jsonify(
@@ -258,37 +274,63 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                 errors=post_form.errors or None,
             )
         return render_template(
-            'blog_post_edit.jinja', form=post_form, post=post
+            'blog_post_edit.jinja', form=post_form, post=self
         )
 
     @classmethod
     @login_required
-    def change_state(cls, uri):
-        "Change the state of the post"
-        posts = cls.search([
-            ('uri', '=', uri),
-            ('nereid_user', '=', request.nereid_user.id),
-        ])
+    def change_state_for_uri(cls, uri):
+        "Change the state of the post for uri"
 
-        if not posts:
+        return cls.get_post_for_uri(uri).change_state()
+
+    @login_required
+    def change_state(self):
+        "Change the state of the post"
+        if self.nereid_user != request.nereid_user:
             abort(404)
 
-        if request.method == 'POST':
-            state = request.form.get('state')
-            getattr(cls, str(state))(posts)
+        state = request.form.get('state')
+        assert(state in ('publish', 'archive', 'draft'))
+        getattr(self, str(state))([self])
 
-            post = posts[0]
+        if request.is_xhr:
+            return jsonify({
+                'success': True,
+                'new_state': self.state,
+            })
+        flash('Your post is now %s' % self.state)
+        return redirect(url_for(
+            'blog.post.render', user_id=self.nereid_user.id,
+            uri=self.uri
+        ))
 
-            if request.is_xhr:
-                return jsonify({
-                    'success': True,
-                    'new_state': post.state,
-                })
-            flash('Your post is now %s' % post.state)
-            return redirect(url_for(
-                'blog.post.render', user_id=post.nereid_user.id,
-                uri=post.uri
-            ))
+    @classmethod
+    @login_required
+    def change_guest_permission_for_uri(cls, uri):
+        "Change guest permission for uri"
+
+        return cls.get_post_for_uri(uri).change_guest_permission()
+
+    @login_required
+    def change_guest_permission(self):
+        "Change guest permission of the post"
+        if self.nereid_user != request.nereid_user:
+            abort(404)
+
+        allow_guest_comment = request.form.get('allow_guest_comments')
+        self.allow_guest_comments = True if allow_guest_comment == 'true' \
+            else False
+        self.save()
+
+        if request.is_xhr:
+            return jsonify({
+                'success': True,
+            })
+        return redirect(url_for(
+            'blog.post.render', user_id=self.nereid_user.id,
+            uri=self.uri
+        ))
 
     @classmethod
     def render(cls, user_id, uri):
@@ -376,16 +418,26 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             "add_comment will be deprecated in 3.2 use render_comment instead.",
             DeprecationWarning,
         )
-        return cls.render_comments(user_id, uri)
+        # Comments can only be added to published posts
+        posts = cls.search([
+            ('nereid_user', '=', user_id),
+            ('uri', '=', uri),
+        ], limit=1)
+        if not posts:
+            abort(404)
 
-    @classmethod
-    def render_comments(cls, user_id, uri):
+        return posts[0].render_comments()
+
+    def render_comments(self):
         """
         Render comments
 
         GET: Return json of all the comments of this post.
         POST: Create new comment for this post.
         """
+        if self.state != 'Published':
+            abort(404)
+
         # Add re_captcha if the configuration has such an option and user
         # is guest
         if 're_captcha_public' in CONFIG.options and request.is_guest_user:
@@ -395,30 +447,19 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         else:
             comment_form = PostCommentForm(request.form)
 
-        # Comments can only be added to published posts
-        posts = cls.search([
-            ('nereid_user', '=', user_id),
-            ('uri', '=', uri),
-            ('state', '=', 'Published'),
-        ], limit=1)
-        if not posts:
-            abort(404)
-
-        post = posts[0]
-
         if request.method == 'GET':
-            if post.nereid_user == request.nereid_user:
+            if self.nereid_user == request.nereid_user:
                 return jsonify(comments=[
-                    comment.serialize() for comment in post.comments
+                    comment.serialize() for comment in self.comments
                 ])
             return jsonify(comments=[
-                comment.serialize() for comment in post.comments
+                comment.serialize() for comment in self.comments
                 if not comment.is_spam
             ])
 
         # If post does not allow guest comments,
         # then dont allow guest user to comment
-        if not post.allow_guest_comments and request.is_guest_user:
+        if not self.allow_guest_comments and request.is_guest_user:
             flash('Guests are not allowed to write comments')
             if request.is_xhr:
                 return jsonify(
@@ -426,11 +467,11 @@ class BlogPost(Workflow, ModelSQL, ModelView):
                     errors=['Guests are not allowed to write comments']
                 )
             return redirect(url_for(
-                'blog.post.render', user_id=post.nereid_user.id, uri=post.uri
+                'blog.post.render', user_id=self.nereid_user.id, uri=self.uri
             ))
 
         if request.method == 'POST' and comment_form.validate():
-            cls.write([post], {
+            self.write([self], {
                 'comments': [('create', [{
                     'nereid_user': request.nereid_user.id,
                     'name': comment_form.name.data,
@@ -442,7 +483,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             return jsonify(success=True) if comment_form.validate() \
                 else jsonify(success=False, errors=comment_form.errors)
         return redirect(url_for(
-            'blog.post.render', user_id=post.nereid_user.id, uri=post.uri
+            'blog.post.render', user_id=self.nereid_user.id, uri=self.uri
         ))
 
 
