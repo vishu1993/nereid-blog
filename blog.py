@@ -12,7 +12,7 @@ from datetime import datetime
 
 from wtforms import Form, TextField, TextAreaField, BooleanField, validators
 from wtforms.validators import ValidationError
-from wtfrecaptcha.fields import RecaptchaField
+from flask_wtf import RecaptchaField
 from trytond.model import ModelSQL, ModelView, Workflow, fields
 from trytond.pyson import Bool, Eval
 from trytond.pool import Pool, PoolMeta
@@ -21,7 +21,7 @@ from trytond.transaction import Transaction
 
 from nereid import (
     request, abort, render_template, login_required, url_for, redirect, flash,
-    jsonify,
+    jsonify, current_user
 )
 from nereid.contrib.pagination import Pagination
 from nereid.helpers import slugify
@@ -473,8 +473,11 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         if request.method == 'POST' and comment_form.validate():
             self.write([self], {
                 'comments': [('create', [{
-                    'nereid_user': request.nereid_user.id,
-                    'name': comment_form.name.data,
+                    'nereid_user': current_user.id
+                        if not current_user.is_anonymous() else None,
+                    'name': current_user.display_name
+                        if not current_user.is_anonymous()
+                            else comment_form.name.data,
                     'content': comment_form.content.data,
                 }])]
             })
@@ -518,7 +521,7 @@ class BlogPostComment(ModelSQL, ModelView):
         return {
             'post': self.post.id,
             'id': self.id,
-            'nereid_user': self.nereid_user.id,
+            'nereid_user': self.nereid_user.id if self.nereid_user else None,
             'name': self.name,
             'content': self.content,
             'create_date': self.create_date.isoformat(),
