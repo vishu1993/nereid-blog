@@ -171,21 +171,28 @@ class BlogPost(Workflow, ModelSQL, ModelView):
             return slugify(self.title)
         return self.uri
 
-    def serialize(self):
+    def serialize(self, purpose=None):
         '''
         Return serializable dict for `self`
         '''
-        return {
+        res = {
             'id': self.id,
             'title': self.title,
             'uri': self.uri,
             'post_date': self.post_date.isoformat()
                 if self.post_date else None,
-            'content': self.content,
             'allow_guest_comments': self.allow_guest_comments,
             'state': self.state,
-            'nereid_user': self.nereid_user.id
+            'nereid_user': self.nereid_user.id,
+            'displayName': self.rec_name,
         }
+        if purpose == 'activity_stream':
+            res['objectType'] = self.__name__
+            res['content'] = self.content[0:50]
+        else:
+            res['content'] = self.content
+
+        return res
 
     @classmethod
     @login_required
