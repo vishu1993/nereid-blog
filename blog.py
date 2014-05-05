@@ -21,7 +21,7 @@ from trytond.transaction import Transaction
 
 from nereid import (
     request, abort, render_template, login_required, url_for, redirect, flash,
-    jsonify, current_user
+    jsonify, current_user, route
 )
 from nereid.contrib.pagination import Pagination
 from nereid.helpers import slugify
@@ -195,6 +195,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         return res
 
     @classmethod
+    @route('/post/-new', methods=['GET', 'POST'])
     @login_required
     def new_post(cls):
         """Create a new post
@@ -244,6 +245,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         return posts[0]
 
     @classmethod
+    @route('/post/<uri>/-edit', methods=['GET', 'POST'])
     @login_required
     def edit_post_for_uri(cls, uri):
         """
@@ -251,6 +253,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         """
         return cls.get_post_for_uri(uri).edit_post()
 
+    @route('/post/<int:active_id>/-edit', methods=['GET', 'POST'])
     @login_required
     def edit_post(self):
         """
@@ -285,12 +288,14 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         )
 
     @classmethod
+    @route('/post/<uri>/-change-state', methods=['POST'])
     @login_required
     def change_state_for_uri(cls, uri):
         "Change the state of the post for uri"
 
         return cls.get_post_for_uri(uri).change_state()
 
+    @route('/post/<int:active_id>/-change-state', methods=['POST'])
     @login_required
     def change_state(self):
         "Change the state of the post"
@@ -313,12 +318,14 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         ))
 
     @classmethod
+    @route('/post/<uri>/-change-guest-permission', methods=['POST'])
     @login_required
     def change_guest_permission_for_uri(cls, uri):
         "Change guest permission for uri"
 
         return cls.get_post_for_uri(uri).change_guest_permission()
 
+    @route('/post/<int:active_id>/-change-guest-permission', methods=['POST'])
     @login_required
     def change_guest_permission(self):
         "Change guest permission of the post"
@@ -340,6 +347,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         ))
 
     @classmethod
+    @route('/post/<int:user_id>/<uri>')
     def render(cls, user_id, uri):
         "Render the blog post"
         NereidUser = Pool().get('nereid.user')
@@ -376,6 +384,8 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         )
 
     @classmethod
+    @route('/posts/<int:user_id>')
+    @route('/posts/<int:user_id>/<int:page>')
     def render_list(cls, user_id, page=1):
         """Render the blog posts for a user
         This should render the list of only published posts of the user
@@ -400,6 +410,8 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         )
 
     @classmethod
+    @route('/posts/-my')
+    @route('/posts/-my/<int:page>')
     @login_required
     def my_posts(self, page=1):
         """Render all the posts of the logged in user
@@ -417,6 +429,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
         return render_template('my_blog_posts.jinja', posts=posts)
 
     @classmethod
+    @route('/post/<int:user_id>/<uri>/-comment', methods=['GET', 'POST'])
     def add_comment(cls, user_id, uri):
         '''
         Add a comment
@@ -435,6 +448,7 @@ class BlogPost(Workflow, ModelSQL, ModelView):
 
         return posts[0].render_comments()
 
+    @route('/post/<int:active_id>/-comment', methods=['GET', 'POST'])
     def render_comments(self):
         """
         Render comments
@@ -535,6 +549,7 @@ class BlogPostComment(ModelSQL, ModelView):
             'is_spam': self.is_spam,
         }
 
+    @route('/comment/<int:active_id>/-spam', methods=['POST'])
     @login_required
     def manage_spam(self):
         "Mark the comment as spam"
