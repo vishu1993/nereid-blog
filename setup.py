@@ -1,9 +1,14 @@
-#!/usr/bin/env python
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# -*- coding: utf-8 -*-
+"""
+    setup for nereid_blog
 
+    :copyright: (c) 2013 by Openlabs Technologies & Consulting (P) Limited
+    :license: BSD, see LICENSE for more details.
+"""
 from setuptools import setup, Command
 import re
+import os
+import ConfigParser
 
 
 class XMLTests(Command):
@@ -52,7 +57,6 @@ class RunAudit(Command):
         pass
 
     def run(self):
-        import os
         import sys
         try:
             import pyflakes.scripts.pyflakes as flakes
@@ -76,14 +80,27 @@ class RunAudit(Command):
             print "No problems found in sourcecode."
 
 
-info = eval(open('__tryton__.py').read())
+def read(fname):
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+
+config = ConfigParser.ConfigParser()
+config.readfp(open('tryton.cfg'))
+info = dict(config.items('tryton'))
+for key in ('depends', 'extras_depend', 'xml'):
+    if key in info:
+        info[key] = info[key].strip().splitlines()
 major_version, minor_version, _ = info.get('version', '0.0.1').split('.', 2)
 major_version = int(major_version)
 minor_version = int(minor_version)
 
 requires = [
-    'nereid >= 2.4, <2.5',
+    'simplejson',
 ]
+
+MODULE = 'nereid_blog'
+PREFIX = 'trytond'
+MODULE2PREFIX = {}
+
 for dep in info.get('depends', []):
     if not re.match(r'(ir|res|webdav)(\W|$)', dep):
         requires.append(
@@ -95,25 +112,27 @@ requires.append(
     'trytond >= %s.%s, < %s.%s' %
     (major_version, minor_version, major_version, minor_version + 1)
 )
+requires.append(
+    'trytond_nereid >=3.0.7.0, <3.1'
+)
 
 setup(
-    name='trytond_nereid_blog',
+    name='%s_%s' % (PREFIX, MODULE),
     version=info.get('version', '0.0.1'),
-    description=info.get('description', ''),
-    author=info.get('author', ''),
-    author_email=info.get('email', ''),
-    url=info.get('website', ''),
-    download_url="http://downloads.openlabs.co.in/" +
-    info.get('version', '0.0.1').rsplit('.', 1)[0] + '/',
+    description='Nereid Blog module',
+    author="Openlabs Technologies & Consulting (P) LTD",
+    author_email="info@openlabs.co.in",
+    url="http://www.openlabs.co.in/",
     package_dir={'trytond.modules.nereid_blog': '.'},
     packages=[
-        'trytond.modules.nereid_blog',
-        'trytond.modules.nereid_blog.tests',
+        'trytond.modules.%s' % MODULE,
+        'trytond.modules.%s.tests' % MODULE,
     ],
     package_data={
-        'trytond.modules.nereid_blog': info.get('xml', [])
+        'trytond.modules.%s' % MODULE: info.get('xml', [])
         + info.get('translation', [])
         + ['emails/*.html']
+        + ['tryton.cfg']
         + ['i18n/*.pot', 'i18n/pt_BR/LC_MESSAGES/*'],
     },
     classifiers=[
@@ -132,8 +151,8 @@ setup(
     zip_safe=False,
     entry_points="""
     [trytond.modules]
-    nereid_blog = trytond.modules.nereid_blog
-    """,
+    %s = trytond.modules.%s
+    """ % (MODULE, MODULE),
     test_suite='tests.suite',
     cmdclass={
         'xmltests': XMLTests,
