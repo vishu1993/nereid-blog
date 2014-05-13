@@ -112,6 +112,9 @@ requires.append(
     'trytond >= %s.%s, < %s.%s' %
     (major_version, minor_version, major_version, minor_version + 1)
 )
+requires.append(
+    'trytond_nereid >=3.0.7.0, <3.1'
+)
 
 setup(
     name='%s_%s' % (PREFIX, MODULE),
