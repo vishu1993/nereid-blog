@@ -98,7 +98,7 @@ requires = [
 ]
 
 MODULE = 'nereid_blog'
-PREFIX = 'trytond'
+PREFIX = 'openlabs'
 MODULE2PREFIX = {}
 
 for dep in info.get('depends', []):
