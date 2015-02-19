@@ -1,0 +1,15 @@
+nereid-blog
+===========
+
+.. image:: https://travis-ci.org/openlabs/nereid-blog.svg?branch=develop
+  :target: https://travis-ci.org/openlabs/nereid-blog
+  :alt: Build Status
+.. image:: https://pypip.in/download/openlabs_nereid_blog/badge.svg
+    :target: https://pypi.python.org/pypi/openlabs_nereid_blog/
+    :alt: Downloads
+.. image:: https://pypip.in/version/openlabs_nereid_blog/badge.svg
+    :target: https://pypi.python.org/pypi/openlabs_nereid_blog/
+    :alt: Latest Version
+.. image:: https://pypip.in/status/openlabs_nereid_blog/badge.svg
+    :target: https://pypi.python.org/pypi/openlabs_nereid_blog/
+    :alt: Development Status
